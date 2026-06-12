@@ -1,0 +1,78 @@
+name: late-data-and-fraud
+
+services:
+  # Single-node Kafka broker in KRaft mode (no Zookeeper).
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: late-data-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+    networks:
+      - late-data-network
+
+  # HTTP producer: POST /clicks accepts clicks with optional `eventTime`
+  # (defaults to now) and an optional `ip` field in `payload`.
+  ingest-api:
+    build:
+      context: ../ingest-api/0-typescript
+      dockerfile: Dockerfile
+    container_name: late-data-ingest-api
+    ports:
+      - "3000:3000"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: ad-clicks
+      KAFKA_CLIENT_ID: ingest-api
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - late-data-network
+
+  # Watermark processor: detects late data (eventTime behind watermark) and
+  # click fraud (IP exceeds per-minute threshold).
+  processor:
+    build:
+      context: ../processor/0-typescript
+      dockerfile: Dockerfile
+    container_name: late-data-processor
+    ports:
+      - "3003:3003"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: ad-clicks
+      KAFKA_CLIENT_ID: processor
+      KAFKA_GROUP_ID: ad-click-processor
+      # Events more than 30 seconds behind the watermark are classified "late".
+      WATERMARK_TOLERANCE_MS: "30000"
+      # IPs sending > 5 clicks/minute are classified "fraud".
+      FRAUD_THRESHOLD: "5"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - late-data-network
+
+networks:
+  late-data-network:
+    name: late-data-network
+    driver: bridge
