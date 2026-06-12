@@ -1,0 +1,26 @@
+{
+  "name": "count-consumer",
+  "version": "1.0.0",
+  "description": "Kafka consumer that counts ad clicks and rejects duplicate clickIds.",
+  "scripts": {
+    "build": "nest build",
+    "start": "nest start",
+    "start:prod": "node dist/main.js",
+    "lint": "eslint \"src/**/*.ts\" --max-warnings 0"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.4.4",
+    "@nestjs/config": "^3.2.3",
+    "@nestjs/core": "^10.4.4",
+    "@nestjs/microservices": "^10.4.4",
+    "@nestjs/platform-express": "^10.4.4",
+    "kafkajs": "^2.2.4",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^10.4.5",
+    "@types/node": "^22.7.4",
+    "typescript": "^5.6.2"
+  }
+}
