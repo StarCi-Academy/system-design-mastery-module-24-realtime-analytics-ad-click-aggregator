@@ -1,0 +1,86 @@
+name: event-ingestion-kafka-csharp
+
+# Same KRaft single-broker stack as the default compose, wired to the C#
+# (Confluent.Kafka) producer + consumer. One language at a time to save disk.
+services:
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: event-ingestion-kafka-broker
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks:
+      - event-ingestion-kafka-network
+
+  ingest-api:
+    build:
+      context: ../ingest-api/2-csharp
+      dockerfile: Dockerfile
+    container_name: event-ingestion-kafka-ingest-api
+    ports:
+      - "3000:3000"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: ad-clicks
+      KAFKA_CLIENT_ID: ingest-api
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - event-ingestion-kafka-network
+
+  count-consumer:
+    build:
+      context: ../count-consumer/2-csharp
+      dockerfile: Dockerfile
+    container_name: event-ingestion-kafka-count-consumer
+    ports:
+      - "3001:3001"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: ad-clicks
+      KAFKA_CLIENT_ID: count-consumer
+      KAFKA_GROUP_ID: ad-click-counter
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - event-ingestion-kafka-network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: event-ingestion-kafka-ui
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: event-ingestion
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - event-ingestion-kafka-network
+
+networks:
+  event-ingestion-kafka-network:
+    name: event-ingestion-kafka-network
+    driver: bridge

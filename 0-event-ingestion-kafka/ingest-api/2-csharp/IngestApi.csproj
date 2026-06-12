@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>IngestApi</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Confluent.Kafka wraps librdkafka — the producer client used here. -->
+    <PackageReference Include="Confluent.Kafka" Version="2.5.3" />
+  </ItemGroup>
+
+</Project>
